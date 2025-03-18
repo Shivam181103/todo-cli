@@ -1,103 +1,199 @@
 const { Command } = require('commander');
 const fs = require('fs');
-const program = new Command()
+const path = require('path');
+
+const program = new Command();
+const TODO_FILE = path.join(__dirname, 'todos.json');
+
+// Helper function to read todos
+const readTodos = () => {
+    try {
+        if (!fs.existsSync(TODO_FILE)) return [];
+        const data = fs.readFileSync(TODO_FILE, 'utf-8');
+        return data ? JSON.parse(data) : [];
+    } catch (error) {
+        console.error("Error reading todos:", error);
+        return [];
+    }
+};
+
+// Helper function to write todos
+const writeTodos = (todos) => {
+    try {
+        fs.writeFileSync(TODO_FILE, JSON.stringify(todos, null, 2), 'utf-8');
+    } catch (error) {
+        console.error("Error writing todos:", error);
+    }
+};
 
 program
     .name('filebasedtasks')
-    .description('File Based Tasks')
-    .version('0.0.1')
+    .description('CLI To-Do List Manager')
+    .version('1.0.0');
+
+// Command to add a new todo
+program
+    .command('add <text>')
+    .description('Add a new todo')
+    .action((text) => {
+        const todos = readTodos();
+        if (todos.some(todo => todo === text.trim())) {
+            console.log('❌ Todo already exists');
+        } else {
+            todos.push(text.trim());
+            writeTodos(todos);
+            console.log('✅ Todo added successfully');
+        }
+    });
+
+// Command to delete a todo
+program
+    .command('delete <text>')
+    .description('Delete a specific todo')
+    .action((text) => {
+        let todos = readTodos();
+        const filteredTodos = todos.filter(todo => todo !== text.trim());
+        if (filteredTodos.length === todos.length) {
+            console.log('❌ Todo not found');
+        } else {
+            writeTodos(filteredTodos);
+            console.log('🗑️ Todo deleted successfully');
+        }
+    });
+
+// Command to list all todos
+program
+    .command('list')
+    .description('List all todos')
+    .action(() => {
+        const todos = readTodos();
+        if (todos.length === 0) {
+            console.log('📭 No todos found');
+        } else {
+            console.log('📝 Your Todos:');
+            todos.forEach((todo, index) => {
+                console.log(`${index + 1}. ${todo}`);
+            });
+        }
+    });
+
+// Command to mark a todo as done
+program
+    .command('done <text>')
+    .description('Mark a todo as done')
+    .action((text) => {
+        let todos = readTodos();
+        let isFound = false;
+        todos = todos.map(todo => {
+            if (todo === text.trim()) {
+                isFound = true;
+                return `✅ ${todo}`;
+            }
+            return todo;
+        });
+
+        if (isFound) {
+            writeTodos(todos);
+            console.log('✔️ Todo marked as done');
+        } else {
+            console.log('❌ Todo not found');
+        }
+    });
+
+// Command to undo a completed todo
+program
+    .command('undo-done <text>')
+    .description('Unmark a completed todo')
+    .action((text) => {
+        let todos = readTodos();
+        let isFound = false;
+        todos = todos.map(todo => {
+            if (todo === `✅ ${text.trim()}`) {
+                isFound = true;
+                return text.trim();
+            }
+            return todo;
+        });
+
+        if (isFound) {
+            writeTodos(todos);
+            console.log('🔄 Todo undone successfully');
+        } else {
+            console.log('❌ Todo not found or not marked as done');
+        }
+    });
+
+// Command to remove all completed todos
+program
+    .command('remove-done')
+    .description('Remove all completed todos')
+    .action(() => {
+        let todos = readTodos();
+        const filteredTodos = todos.filter(todo => !todo.startsWith('✅ '));
+
+        if (filteredTodos.length === todos.length) {
+            console.log('⚠️ No completed todos found');
+        } else {
+            writeTodos(filteredTodos);
+            console.log('🧹 Completed todos removed successfully');
+        }
+    });
+
+// Command to clear all todos
+program
+    .command('clear')
+    .description('Remove all todos')
+    .action(() => {
+        writeTodos([]);
+        console.log('🚀 All todos cleared successfully');
+    });
+
+const addTodosInBulk = (todos) => {
+    try {
+        const todosList = fs.existsSync('todos.json') ? fs.readFileSync('todos.json', 'utf-8') : '[]';
+        const parsedTodos = JSON.parse(todosList);
+        let newTodos = [];
+
+        todos.forEach(todo => {
+            if (!parsedTodos.includes(todo.trim())) {
+                newTodos.push(todo.trim());
+            }
+        });
+
+        if (newTodos.length === 0) {
+            console.log('All provided todos already exist.');
+            return;
+        }
+
+        fs.writeFileSync('todos.json', JSON.stringify([...parsedTodos, ...newTodos], null, 2), 'utf-8');
+        console.log('Todos added successfully');
+    } catch (error) {
+        console.error('Error adding todos:', error);
+    }
+};
+// Command to search for todos
+program
+    .command('search <keyword>')
+    .description('Search for todos containing a keyword')
+    .action((keyword) => {
+        const todos = readTodos();
+        const results = todos.filter(todo => todo.toLowerCase().includes(keyword.toLowerCase()));
+
+        if (results.length === 0) {
+            console.log(`🔍 No todos found containing "${keyword}"`);
+        } else {
+            console.log(`🔎 Found ${results.length} todos:`);
+            results.forEach((todo, index) => {
+                console.log(`${index + 1}. ${todo}`);
+            });
+        }
+    });
 
 program
-    .option('-a, --add <text>', 'Add a todo')
-    .option('-d, --delete <text>', 'Delete a todo')
-    .option('-l, --list', 'List all todos')
-    .option('-c, --done <text>', 'Mark a todo as done')
-    .option('-t, --removeDone', 'Remove which is done')
-    .action((options) => {
-        if (options.add) addTodo(options.add)
-        else if (options.delete) deleteTodo(options.delete)
-        else if (options.list) getAllTodos()
-        else if (options.done) markTodoAsDone(options.done)
-        else if (options.removeDone) removeDone()
+    .command('addBulk <todos...>')
+    .description('Add multiple todos at once')
+    .action(addTodosInBulk);
 
-    })
 
-const removeDone = () => {
-    try {
-        const todosList = fs.readFileSync('todos.json', 'utf-8');
-        const parsedTodos = JSON.parse(todosList);
-        const filteredTodos = parsedTodos.filter(todo => !/^--Done--.*--Done--$/.test(todo));
-        if (filteredTodos.length === parsedTodos.length) {
-            console.log('No Completed Todo found');
-            return;
-        } 
-        fs.writeFileSync('todos.json', JSON.stringify(filteredTodos), 'utf-8');
-        console.log('Completed todo removed successfully');
 
-    } catch (erorr) {
-        console.error(erorr)
-    }
-}
-const addTodo = (text) => {
-    const todosList = fs.readFileSync('todos.json', 'utf-8');
-    const parsedTodos = JSON.parse(todosList);
-    if (parsedTodos.findIndex(todo => todo == text.trim()) === -1) {
-        try {
-            fs.writeFileSync('todos.json', JSON.stringify([...parsedTodos, text]), 'utf-8');
-            console.log('Todo added successfully');
-        } catch (error) {
-            console.log(error);
-        }
-    } else {
-        console.log('Todo already exists');
-    }
-}
-
-const deleteTodo = (text) => {
-    const todosList = fs.readFileSync('todos.json', 'utf-8');
-    const parsedTodos = JSON.parse(todosList);
-    const filteredTodos = parsedTodos.filter(todo => todo !== text.trim());
-    if (filteredTodos.length === parsedTodos.length) {
-        console.log('Todo not found');
-        return;
-    }
-    try {
-        fs.writeFileSync('todos.json', JSON.stringify(filteredTodos), 'utf-8');
-        console.log('Todo deleted successfully');
-    } catch (error) {
-        console.log(error);
-    }
-}
-
-const getAllTodos = () => {
-    const todosList = fs.readFileSync('todos.json', 'utf-8');
-    const parsedTodos = JSON.parse(todosList);
-    console.log(parsedTodos);
-}
-
-const markTodoAsDone = (text) => {
-    const todosList = fs.readFileSync('todos.json', 'utf-8');
-    const parsedTodos = JSON.parse(todosList);
-    let isFound = false
-    const filteredTodos = parsedTodos.map(todo => {
-        if (todo == text.trim()) {
-            console.log("Todo Marked as Done");
-            isFound = true
-            return `--Done--${todo}--Done--`
-        }
-        return todo;
-    });
-    if (!isFound) {
-        console.log('Todo not found');
-        return;
-    }
-    try {
-        fs.writeFileSync('todos.json', JSON.stringify(filteredTodos), 'utf-8');
-    } catch (error) {
-        console.log(error);
-    }
-}
-
-program.parse(process.argv)
-
-module.exports = program
+program.parse(process.argv);
